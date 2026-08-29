@@ -1,6 +1,7 @@
 import JSZip from "jszip";
 import { packAsar, utf8 } from "@/lib/asar";
 import type { Analysis, FileMap } from "@/lib/detect";
+import type { BuildKind, BuiltAsset } from "@/lib/forge/types";
 import type { ForgePlan } from "@/lib/forge-plan";
 import type { Platform } from "@/lib/types";
 import { slugify } from "@/lib/utils";
@@ -61,6 +62,16 @@ function decodeDataUrl(dataUrl: string): Uint8Array | null {
   }
 }
 
+function decodeAsset(asset: BuiltAsset): Uint8Array {
+  if (asset.encoding === "base64") {
+    const binary = atob(asset.content);
+    const out = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
+    return out;
+  }
+  return utf8(asset.content);
+}
+
 async function rasterIcon(dataUrl: string): Promise<Uint8Array | null> {
   const raw = decodeDataUrl(dataUrl);
   if (!raw) return null;
@@ -92,46 +103,6 @@ async function rasterIcon(dataUrl: string): Promise<Uint8Array | null> {
     img.onerror = () => resolve(raw);
     img.src = dataUrl;
   });
-}
-
-function shellHtml(opts: {
-  name: string;
-  description?: string;
-  hasCover: boolean;
-  hasClient: boolean;
-}) {
-  const picture = opts.hasCover ? `<img src="cover.png" alt="" />` : "";
-  const client = opts.hasClient
-    ? `<script src="js/neutralino.js"></script><script>Neutralino.init();</script>`
-    : "";
-  return `<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>${escapeHtml(opts.name)}</title>
-  <style>
-    :root { color-scheme: dark; }
-    html, body { margin: 0; height: 100%; background: #0b0b0c; color: #f4f2ec; font-family: Georgia, serif; }
-    main { min-height: 100%; display: grid; place-items: center; padding: 48px 24px; }
-    .card { width: min(720px, 100%); }
-    img { width: 100%; border-radius: 16px; display: block; }
-    h1 { font-weight: 400; font-size: 42px; letter-spacing: -0.03em; margin: 28px 0 8px; }
-    p { margin: 0; color: #8a8882; line-height: 1.5; }
-  </style>
-</head>
-<body>
-  <main>
-    <div class="card">
-      ${picture}
-      <h1>${escapeHtml(opts.name)}</h1>
-      <p>${escapeHtml(opts.description || "Forged by Kaji.")}</p>
-    </div>
-  </main>
-  ${client}
-</body>
-</html>
-`;
 }
 
 function makeConfig(opts: {
@@ -184,26 +155,6 @@ function makeConfig(opts: {
   };
 }
 
-function webRootFromFiles(files: FileMap) {
-  const html = Object.keys(files).find((path) =>
-    path.replace(/\\/g, "/").toLowerCase().endsWith("index.html"),
-  );
-  if (!html) return null;
-  const normalized = html.replace(/\\/g, "/");
-  const dir = normalized.includes("/") ? normalized.slice(0, normalized.lastIndexOf("/") + 1) : "";
-  const out: Record<string, string> = {};
-  for (const [path, content] of Object.entries(files)) {
-    const n = path.replace(/\\/g, "/");
-    if (dir && !n.startsWith(dir)) continue;
-    const rel = dir ? n.slice(dir.length) : n;
-    if (!rel || rel.endsWith("/")) continue;
-    if (!/\.(html?|css|js|mjs|cjs|svg)$/i.test(rel)) continue;
-    if (/^package(-lock)?\.json$/i.test(rel.split("/").pop() || "")) continue;
-    out[rel] = content;
-  }
-  return Object.keys(out).length ? out : null;
-}
-
 function infoPlist(opts: { name: string; slug: string; id: string }) {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -246,16 +197,14 @@ export async function buildDesktopZip(opts: {
   iconDataUrl: string | null;
   pictureDataUrl: string | null;
   files?: FileMap;
+  assets?: BuiltAsset[] | null;
+  kind?: BuildKind | null;
 }) {
   const name = opts.name.trim() || "App";
   const slug = slugify(name);
   const safe = fileSafe(name);
   const startUrl = opts.analysis.startUrl;
-  const remote = Boolean(startUrl && /^https?:\/\//i.test(startUrl));
-  const staticFiles =
-    !remote && opts.analysis.framework === "Static site"
-      ? webRootFromFiles(opts.files ?? {})
-      : null;
+  const remote = opts.kind === "url" && Boolean(startUrl && /^https?:\/\//i.test(startUrl));
 
   const asarFiles: Record<string, Uint8Array> = {};
   let iconPacked = false;
@@ -268,30 +217,15 @@ export async function buildDesktopZip(opts: {
   }
 
   if (remote) {
-    // Remote sites load inside the native window as-is.
-  } else if (staticFiles) {
-    for (const [rel, content] of Object.entries(staticFiles)) {
-      asarFiles[`resources/${rel}`] = utf8(content);
+    // Live address loads inside the native window.
+  } else if (opts.assets?.length) {
+    for (const asset of opts.assets) {
+      const rel = asset.path.replace(/^\/+/, "");
+      if (!rel) continue;
+      asarFiles[`resources/${rel}`] = decodeAsset(asset);
     }
   } else {
-    let hasCover = false;
-    if (opts.pictureDataUrl) {
-      const png = await rasterIcon(opts.pictureDataUrl);
-      if (png) {
-        asarFiles["resources/cover.png"] = png;
-        hasCover = true;
-      }
-    }
-    const client = await loadRuntime(RUNTIME.client);
-    asarFiles["resources/js/neutralino.js"] = client;
-    asarFiles["resources/index.html"] = utf8(
-      shellHtml({
-        name,
-        description: opts.analysis.description,
-        hasCover,
-        hasClient: true,
-      }),
-    );
+    throw new Error("Nothing compiled to wrap.");
   }
 
   const config = makeConfig({

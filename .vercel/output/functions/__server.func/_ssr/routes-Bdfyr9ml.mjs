@@ -2,12 +2,12 @@ import { i as __toESM } from "../_runtime.mjs";
 import { y as require_jsx_runtime, z as require_react } from "../_libs/@tanstack/react-router+[...].mjs";
 import { n as TSS_SERVER_FUNCTION, r as getServerFnById, t as createServerFn } from "./ssr.mjs";
 import { t as cva } from "../_libs/class-variance-authority+clsx.mjs";
-import { a as heuristicNotes, i as hashSeed, n as detectProject, o as slugify, r as forgeLogLines, t as cn } from "./detect-4ghxlhvC.mjs";
+import { a as slugify, i as heuristicNotes, n as detectProject, r as hashSeed, t as cn } from "./detect-B61kcKp4.mjs";
 import { a as Folder, c as ArrowLeft, i as Image$1, n as Scan, o as Download, r as Paperclip, s as ArrowRight } from "../_libs/lucide-react.mjs";
 import { n as toast, t as Toaster } from "../_libs/sonner.mjs";
 import { t as require_lib } from "../_libs/jszip+[...].mjs";
 import { t as create } from "../_libs/zustand.mjs";
-//#region node_modules/.nitro/vite/services/ssr/assets/routes-BCqYge1T.js
+//#region node_modules/.nitro/vite/services/ssr/assets/routes-Bdfyr9ml.js
 var import_react = /* @__PURE__ */ __toESM(require_react());
 var import_jsx_runtime = require_jsx_runtime();
 var import_lib = /* @__PURE__ */ __toESM(require_lib());
@@ -198,6 +198,15 @@ function decodeDataUrl(dataUrl) {
 		return utf8(payload);
 	}
 }
+function decodeAsset(asset) {
+	if (asset.encoding === "base64") {
+		const binary = atob(asset.content);
+		const out = new Uint8Array(binary.length);
+		for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
+		return out;
+	}
+	return utf8(asset.content);
+}
 async function rasterIcon(dataUrl) {
 	const raw = decodeDataUrl(dataUrl);
 	if (!raw) return null;
@@ -226,38 +235,6 @@ async function rasterIcon(dataUrl) {
 		img.onerror = () => resolve(raw);
 		img.src = dataUrl;
 	});
-}
-function shellHtml(opts) {
-	const picture = opts.hasCover ? `<img src="cover.png" alt="" />` : "";
-	const client = opts.hasClient ? `<script src="js/neutralino.js"><\/script><script>Neutralino.init();<\/script>` : "";
-	return `<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>${escapeHtml(opts.name)}</title>
-  <style>
-    :root { color-scheme: dark; }
-    html, body { margin: 0; height: 100%; background: #0b0b0c; color: #f4f2ec; font-family: Georgia, serif; }
-    main { min-height: 100%; display: grid; place-items: center; padding: 48px 24px; }
-    .card { width: min(720px, 100%); }
-    img { width: 100%; border-radius: 16px; display: block; }
-    h1 { font-weight: 400; font-size: 42px; letter-spacing: -0.03em; margin: 28px 0 8px; }
-    p { margin: 0; color: #8a8882; line-height: 1.5; }
-  </style>
-</head>
-<body>
-  <main>
-    <div class="card">
-      ${picture}
-      <h1>${escapeHtml(opts.name)}</h1>
-      <p>${escapeHtml(opts.description || "Forged by Kaji.")}</p>
-    </div>
-  </main>
-  ${client}
-</body>
-</html>
-`;
 }
 function makeConfig(opts) {
 	return {
@@ -301,23 +278,6 @@ function makeConfig(opts) {
 		}
 	};
 }
-function webRootFromFiles(files) {
-	const html = Object.keys(files).find((path) => path.replace(/\\/g, "/").toLowerCase().endsWith("index.html"));
-	if (!html) return null;
-	const normalized = html.replace(/\\/g, "/");
-	const dir = normalized.includes("/") ? normalized.slice(0, normalized.lastIndexOf("/") + 1) : "";
-	const out = {};
-	for (const [path, content] of Object.entries(files)) {
-		const n = path.replace(/\\/g, "/");
-		if (dir && !n.startsWith(dir)) continue;
-		const rel = dir ? n.slice(dir.length) : n;
-		if (!rel || rel.endsWith("/")) continue;
-		if (!/\.(html?|css|js|mjs|cjs|svg)$/i.test(rel)) continue;
-		if (/^package(-lock)?\.json$/i.test(rel.split("/").pop() || "")) continue;
-		out[rel] = content;
-	}
-	return Object.keys(out).length ? out : null;
-}
 function infoPlist(opts) {
 	return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -356,8 +316,7 @@ async function buildDesktopZip(opts) {
 	const slug = slugify(name);
 	const safe = fileSafe(name);
 	const startUrl = opts.analysis.startUrl;
-	const remote = Boolean(startUrl && /^https?:\/\//i.test(startUrl));
-	const staticFiles = !remote && opts.analysis.framework === "Static site" ? webRootFromFiles(opts.files ?? {}) : null;
+	const remote = opts.kind === "url" && Boolean(startUrl && /^https?:\/\//i.test(startUrl));
 	const asarFiles = {};
 	let iconPacked = false;
 	if (opts.iconDataUrl) {
@@ -367,24 +326,12 @@ async function buildDesktopZip(opts) {
 			iconPacked = true;
 		}
 	}
-	if (remote) {} else if (staticFiles) for (const [rel, content] of Object.entries(staticFiles)) asarFiles[`resources/${rel}`] = utf8(content);
-	else {
-		let hasCover = false;
-		if (opts.pictureDataUrl) {
-			const png = await rasterIcon(opts.pictureDataUrl);
-			if (png) {
-				asarFiles["resources/cover.png"] = png;
-				hasCover = true;
-			}
-		}
-		asarFiles["resources/js/neutralino.js"] = await loadRuntime(RUNTIME.client);
-		asarFiles["resources/index.html"] = utf8(shellHtml({
-			name,
-			description: opts.analysis.description,
-			hasCover,
-			hasClient: true
-		}));
+	if (remote) {} else if (opts.assets?.length) for (const asset of opts.assets) {
+		const rel = asset.path.replace(/^\/+/, "");
+		if (!rel) continue;
+		asarFiles[`resources/${rel}`] = decodeAsset(asset);
 	}
+	else throw new Error("Nothing compiled to wrap.");
 	const config = makeConfig({
 		name,
 		slug,
@@ -521,59 +468,99 @@ var createSsrRpc = (functionId) => {
 	});
 };
 var inspectUrl = createServerFn({ method: "POST" }).validator((input) => input).handler(createSsrRpc("7a5d44b7352bf7aa960bbbc4866e5fa04de0ef887dcd1e0fa7de50fbc0613eda"));
+var vitePkg = (name) => JSON.stringify({
+	name,
+	private: true,
+	type: "module",
+	scripts: {
+		dev: "vite",
+		build: "vite build",
+		preview: "vite preview"
+	},
+	dependencies: {
+		react: "^19.0.0",
+		"react-dom": "^19.0.0"
+	},
+	devDependencies: {
+		vite: "^6.0.0",
+		"@vitejs/plugin-react": "^4.3.0"
+	}
+}, null, 2);
+var viteConfig = `import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+export default defineConfig({ plugins: [react()] });
+`;
+var indexHtml = (title) => `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${title}</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"><\/script>
+  </body>
+</html>
+`;
+var mainTsx = `import { createRoot } from "react-dom/client";
+import { App } from "./App";
+createRoot(document.getElementById("root")!).render(<App />);
+`;
 var SAMPLES = [
 	{
 		id: "north",
 		name: "North",
 		blurb: "React + Vite",
 		files: {
-			"package.json": JSON.stringify({
-				name: "north",
-				private: true,
-				type: "module",
-				scripts: {
-					dev: "vite",
-					build: "tsc -b && vite build",
-					preview: "vite preview"
-				},
-				dependencies: {
-					react: "^19.0.0",
-					"react-dom": "^19.0.0"
-				},
-				devDependencies: {
-					vite: "^6.0.0",
-					typescript: "^5.7.0",
-					"@vitejs/plugin-react": "^4.0.0"
-				}
-			}, null, 2),
-			"index.html": `<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <title>North</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"><\/script>
-  </body>
-</html>`,
-			"vite.config.ts": `import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
-export default defineConfig({ plugins: [react()] });
-`,
-			"tsconfig.json": `{ "compilerOptions": { "jsx": "react-jsx", "strict": true } }`,
-			"src/main.tsx": `import { createRoot } from "react-dom/client";
-import { App } from "./App";
-createRoot(document.getElementById("root")!).render(<App />);
-`,
-			"src/App.tsx": `export function App() {
+			"package.json": vitePkg("north"),
+			"index.html": indexHtml("North"),
+			"vite.config.ts": viteConfig,
+			"src/main.tsx": mainTsx,
+			"src/App.tsx": `import "./app.css";
+
+const rows = [
+  ["N-104", "Wool coat", "On hand"],
+  ["N-221", "Field notebook", "Low"],
+  ["N-308", "Brass lamp", "On hand"],
+];
+
+export function App() {
   return (
     <main>
-      <h1>North</h1>
-      <p>Inventory, quiet and close at hand.</p>
+      <header>
+        <p>Inventory</p>
+        <h1>North</h1>
+      </header>
+      <table>
+        <thead>
+          <tr>
+            <th>Sku</th>
+            <th>Item</th>
+            <th>State</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row[0]}>
+              {row.map((cell) => (
+                <td key={cell}>{cell}</td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </main>
   );
 }
+`,
+			"src/app.css": `html, body, #root { margin: 0; min-height: 100%; background: #0b0b0c; color: #f4f2ec; font-family: Georgia, serif; }
+main { padding: 48px 40px; }
+header p { margin: 0; letter-spacing: 0.18em; text-transform: uppercase; font-size: 11px; color: #8a8882; font-family: system-ui, sans-serif; }
+h1 { font-weight: 400; font-size: 48px; letter-spacing: -0.04em; margin: 8px 0 32px; }
+table { width: min(640px, 100%); border-collapse: collapse; }
+th, td { text-align: left; padding: 12px 0; border-bottom: 1px solid #2a2a2c; }
+th { font-family: system-ui, sans-serif; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #8a8882; font-weight: 500; }
 `
 		}
 	},
@@ -605,39 +592,45 @@ h1 { font-weight: 400; letter-spacing: -0.03em; }
 	{
 		id: "harbor",
 		name: "Harbor",
-		blurb: "Next.js",
+		blurb: "React + Vite",
 		files: {
-			"package.json": JSON.stringify({
-				name: "harbor",
-				private: true,
-				scripts: {
-					dev: "next dev",
-					build: "next build",
-					start: "next start"
-				},
-				dependencies: {
-					next: "^15.0.0",
-					react: "^19.0.0",
-					"react-dom": "^19.0.0"
-				}
-			}, null, 2),
-			"next.config.mjs": "export default {};\n",
-			"app/layout.tsx": `export default function RootLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <html lang="en">
-      <body>{children}</body>
-    </html>
-  );
-}
-`,
-			"app/page.tsx": `export default function Page() {
+			"package.json": vitePkg("harbor"),
+			"index.html": indexHtml("Harbor"),
+			"vite.config.ts": viteConfig,
+			"src/main.tsx": mainTsx,
+			"src/App.tsx": `import "./app.css";
+
+const tide = [
+  ["06:40", "Skua", "In"],
+  ["08:15", "Lark", "Out"],
+  ["11:05", "Tern", "In"],
+];
+
+export function App() {
   return (
     <main>
+      <p>Today</p>
       <h1>Harbor</h1>
-      <p>Arrivals, departures, the day’s tide.</p>
+      <ul>
+        {tide.map(([time, name, dir]) => (
+          <li key={time}>
+            <span>{time}</span>
+            <strong>{name}</strong>
+            <em>{dir}</em>
+          </li>
+        ))}
+      </ul>
     </main>
   );
 }
+`,
+			"src/app.css": `html, body, #root { margin: 0; min-height: 100%; background: #0b0b0c; color: #f4f2ec; font-family: Georgia, serif; }
+main { padding: 48px 40px; }
+p { margin: 0; letter-spacing: 0.18em; text-transform: uppercase; font-size: 11px; color: #8a8882; font-family: system-ui, sans-serif; }
+h1 { font-weight: 400; font-size: 48px; letter-spacing: -0.04em; margin: 8px 0 32px; }
+ul { list-style: none; padding: 0; margin: 0; width: min(420px, 100%); }
+li { display: grid; grid-template-columns: 4.5rem 1fr 3rem; gap: 12px; padding: 14px 0; border-bottom: 1px solid #2a2a2c; }
+em { font-style: normal; color: #8a8882; }
 `
 		}
 	}
@@ -697,6 +690,8 @@ var useKaji = create((set, get) => ({
 	analysis: null,
 	files: {},
 	plan: null,
+	builtAssets: null,
+	buildKind: null,
 	history: [],
 	ingestUrl: async (raw) => {
 		set({
@@ -717,7 +712,9 @@ var useKaji = create((set, get) => ({
 				analyzing: false,
 				error: null,
 				stage: "set",
-				plan: null
+				plan: null,
+				builtAssets: null,
+				buildKind: null
 			});
 		} catch {
 			set({
@@ -741,7 +738,9 @@ var useKaji = create((set, get) => ({
 			error: null,
 			analyzing: false,
 			stage: "set",
-			plan: null
+			plan: null,
+			builtAssets: null,
+			buildKind: null
 		});
 	},
 	ingestFiles: (files, images) => {
@@ -760,7 +759,9 @@ var useKaji = create((set, get) => ({
 			error: null,
 			analyzing: false,
 			stage: "set",
-			plan: null
+			plan: null,
+			builtAssets: null,
+			buildKind: null
 		});
 	},
 	setName: (name) => {
@@ -805,10 +806,12 @@ var useKaji = create((set, get) => ({
 		set({
 			stage: "forge",
 			forging: true,
-			error: null
+			error: null,
+			builtAssets: null,
+			buildKind: null
 		});
 	},
-	finishForge: (plan) => {
+	finishForge: (plan, built) => {
 		const { name, analysis, history } = get();
 		const item = {
 			id: crypto.randomUUID(),
@@ -820,6 +823,8 @@ var useKaji = create((set, get) => ({
 		writeHistory(nextHistory);
 		set({
 			plan,
+			builtAssets: built.assets,
+			buildKind: built.kind,
 			forging: false,
 			stage: "done",
 			history: nextHistory
@@ -842,7 +847,9 @@ var useKaji = create((set, get) => ({
 		platforms: { ...emptyPlatforms },
 		analysis: null,
 		files: {},
-		plan: null
+		plan: null,
+		builtAssets: null,
+		buildKind: null
 	})
 }));
 var PLATFORM_LABEL = {
@@ -855,6 +862,11 @@ var PLATFORM_ARTIFACT = {
 	macos: ".app",
 	linux: ""
 };
+var KIND_LABEL = {
+	vite: "Compiled with Vite",
+	static: "Packed as static files",
+	url: "Live site in a native window"
+};
 function DoneStage() {
 	const analysis = useKaji((s) => s.analysis);
 	const plan = useKaji((s) => s.plan);
@@ -863,23 +875,30 @@ function DoneStage() {
 	const pictureDataUrl = useKaji((s) => s.pictureDataUrl);
 	const platforms = useKaji((s) => s.platforms);
 	const files = useKaji((s) => s.files);
+	const builtAssets = useKaji((s) => s.builtAssets);
+	const buildKind = useKaji((s) => s.buildKind);
 	const reset = useKaji((s) => s.reset);
 	const [busy, setBusy] = (0, import_react.useState)(null);
 	const selected = Object.keys(platforms).filter((p) => platforms[p]);
+	async function pack(platform) {
+		if (!analysis || !plan) throw new Error("missing");
+		return buildDesktopZip({
+			name: name.trim(),
+			analysis,
+			plan,
+			platform,
+			iconDataUrl,
+			pictureDataUrl,
+			files,
+			assets: builtAssets,
+			kind: buildKind
+		});
+	}
 	async function download(platform) {
-		if (!analysis || !plan) return;
 		setBusy(platform);
 		try {
-			const pack = await buildDesktopZip({
-				name: name.trim(),
-				analysis,
-				plan,
-				platform,
-				iconDataUrl,
-				pictureDataUrl,
-				files
-			});
-			triggerDownload(pack.blob, pack.filename);
+			const built = await pack(platform);
+			triggerDownload(built.blob, built.filename);
 			toast.success(`${PLATFORM_LABEL[platform]}${PLATFORM_ARTIFACT[platform] ? ` ${PLATFORM_ARTIFACT[platform]}` : ""} is ready`);
 		} catch {
 			toast.error("Could not compile that build.");
@@ -891,17 +910,8 @@ function DoneStage() {
 		setBusy("all");
 		try {
 			for (const p of selected) {
-				if (!analysis || !plan) continue;
-				const pack = await buildDesktopZip({
-					name: name.trim(),
-					analysis,
-					plan,
-					platform: p,
-					iconDataUrl,
-					pictureDataUrl,
-					files
-				});
-				triggerDownload(pack.blob, pack.filename);
+				const built = await pack(p);
+				triggerDownload(built.blob, built.filename);
 			}
 			toast.success("All builds are ready");
 		} catch {
@@ -954,17 +964,17 @@ function DoneStage() {
 						value: `${analysis.framework} · ${analysis.language}`
 					}),
 					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Fact, {
+						label: "Forge",
+						value: buildKind ? KIND_LABEL[buildKind] : "Native window"
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Fact, {
 						label: "Window",
 						value: `${plan.window.width} × ${plan.window.height}`
 					}),
 					analysis.entry ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Fact, {
 						label: "Entry",
 						value: analysis.entry
-					}) : null,
-					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Fact, {
-						label: "Output",
-						value: "Native window, standalone binary"
-					})
+					}) : null
 				]
 			}),
 			plan.notes.length ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
@@ -1288,79 +1298,209 @@ function DropStage() {
 		]
 	});
 }
-var planForge = createServerFn({ method: "POST" }).validator((input) => input).handler(createSsrRpc("90f0238d0981348cc35948c8d1e89788d47bedbb92c75f99f95de535ab261262"));
+function paths(files) {
+	return Object.keys(files).map((p) => p.replace(/\\/g, "/").replace(/^\.\//, ""));
+}
+function hasFile(files, suffix) {
+	const needle = suffix.toLowerCase();
+	return paths(files).some((p) => p.toLowerCase() === needle || p.toLowerCase().endsWith("/" + needle));
+}
+function hasViteSource(files) {
+	const html = hasFile(files, "index.html");
+	const entry = hasFile(files, "src/main.tsx") || hasFile(files, "src/main.ts") || hasFile(files, "src/main.jsx") || hasFile(files, "src/main.js") || hasFile(files, "src/index.tsx") || hasFile(files, "src/index.ts") || hasFile(files, "src/index.jsx") || hasFile(files, "src/index.js") || hasFile(files, "src/App.tsx");
+	const pkg = hasFile(files, "package.json");
+	return html && entry && pkg;
+}
+function planBuild(analysis, files) {
+	if (analysis.sourceKind === "url" && analysis.startUrl) return {
+		kind: "url",
+		packageManager: "npm",
+		outDir: "",
+		reason: "Live site — wrap the address in a native window."
+	};
+	if (hasViteSource(files) && (analysis.bundler === "Vite" || analysis.framework.includes("Vite") || hasFile(files, "vite.config.ts") || hasFile(files, "vite.config.js") || hasFile(files, "vite.config.mts"))) return {
+		kind: "vite",
+		packageManager: "npm",
+		outDir: "dist",
+		reason: "Install dependencies, run Vite, wrap dist/."
+	};
+	if (analysis.framework === "Static site" || hasFile(files, "index.html")) {
+		if (analysis.framework === "Static site" || !analysis.buildCommand) return {
+			kind: "static",
+			packageManager: "npm",
+			outDir: "",
+			reason: "Static files — no compile step."
+		};
+	}
+	if (analysis.startUrl && /^https?:\/\//i.test(analysis.startUrl)) return {
+		kind: "url",
+		packageManager: "npm",
+		outDir: "",
+		reason: "Source is not a Vite app; wrapping the live address."
+	};
+	return {
+		kind: "none",
+		reason: "Kaji forges Vite, React, and static sites. Drop a project with an index.html, or paste a live URL."
+	};
+}
+var STATIC_EXT = /\.(html?|css|js|mjs|cjs|svg)$/i;
+function staticAssetsFromFiles(files) {
+	const entries = Object.entries(files).map(([path, content]) => ({
+		path: path.replace(/\\/g, "/").replace(/^\.\//, ""),
+		content
+	}));
+	const html = entries.find((e) => e.path.toLowerCase().endsWith("index.html"));
+	const dir = html?.path.includes("/") ? html.path.slice(0, html.path.lastIndexOf("/") + 1) : "";
+	const assets = [];
+	for (const { path, content } of entries) {
+		if (dir && !path.startsWith(dir)) continue;
+		const rel = dir ? path.slice(dir.length) : path;
+		if (!rel || !STATIC_EXT.test(rel)) continue;
+		const base = rel.split("/").pop() || "";
+		if (/^package(-lock)?\.json$/i.test(base)) continue;
+		assets.push({
+			path: rel,
+			encoding: "utf8",
+			content
+		});
+	}
+	return assets;
+}
+createServerFn({ method: "POST" }).validator((input) => input).handler(createSsrRpc("90f0238d0981348cc35948c8d1e89788d47bedbb92c75f99f95de535ab261262"));
+var forgeJob = createServerFn({ method: "POST" }).validator((input) => input).handler(createSsrRpc("59c84470a2103de2db0f645c69a36714be92e5ac0bb08dd0e7944d4ea0ee73df"));
+async function executeForge(opts) {
+	const logs = [];
+	const say = (line) => {
+		logs.push(line);
+		opts.log(line);
+	};
+	say("Opened the crate.");
+	const exec = planBuild(opts.analysis, opts.files);
+	if (exec.kind === "none") {
+		say(exec.reason);
+		return {
+			ok: false,
+			error: exec.reason,
+			logs
+		};
+	}
+	say(`Found ${opts.analysis.framework}.`);
+	if (opts.analysis.bundler) say(`${opts.analysis.bundler}, ready.`);
+	let assets = null;
+	const kind = exec.kind;
+	let plan = {
+		window: {
+			width: 1280,
+			height: 800
+		},
+		notes: heuristicNotes(opts.analysis),
+		caveats: []
+	};
+	if (exec.kind === "vite") {
+		say("Opening an isolated sandbox.");
+		say("Compiling.");
+		const job = await forgeJob({ data: {
+			analysis: opts.analysis,
+			name: opts.name,
+			files: opts.files,
+			kind: "vite"
+		} });
+		plan = job.plan;
+		if (!job.compile?.ok) {
+			const extra = job.compile?.log ?? [];
+			for (const line of extra) say(line);
+			return {
+				ok: false,
+				error: job.compile?.error || "The project failed to compile.",
+				logs
+			};
+		}
+		for (const line of job.compile.log) say(line);
+		assets = job.compile.assets;
+		say("Wrapping the compiled app in a native window.");
+	} else if (exec.kind === "static") {
+		plan = (await forgeJob({ data: {
+			analysis: opts.analysis,
+			name: opts.name,
+			files: {},
+			kind: "static"
+		} })).plan;
+		assets = staticAssetsFromFiles(opts.files);
+		if (!assets.length) return {
+			ok: false,
+			error: "No HTML to pack.",
+			logs
+		};
+		say("Packing the site as-is.");
+		say("Wrapping it in a native window.");
+	} else {
+		plan = (await forgeJob({ data: {
+			analysis: opts.analysis,
+			name: opts.name,
+			files: {},
+			kind: "url"
+		} })).plan;
+		say(`Pointing the window at ${opts.analysis.startUrl}.`);
+	}
+	say(`Stamped “${opts.name}”.`);
+	say("Ready.");
+	return {
+		ok: true,
+		kind,
+		assets,
+		plan,
+		logs
+	};
+}
 function ForgeStage() {
 	const analysis = useKaji((s) => s.analysis);
+	const files = useKaji((s) => s.files);
 	const name = useKaji((s) => s.name);
 	const iconDataUrl = useKaji((s) => s.iconDataUrl);
-	const platforms = useKaji((s) => s.platforms);
 	const finishForge = useKaji((s) => s.finishForge);
 	const failForge = useKaji((s) => s.failForge);
-	const selected = (0, import_react.useMemo)(() => Object.keys(platforms).filter((p) => platforms[p]), [platforms]);
-	const lines = (0, import_react.useMemo)(() => analysis ? forgeLogLines(analysis, name.trim() || "App", selected) : [], [
-		analysis,
-		name,
-		selected
-	]);
-	const [shown, setShown] = (0, import_react.useState)(1);
-	const [progress, setProgress] = (0, import_react.useState)(6);
-	const planRef = (0, import_react.useRef)(null);
+	const [lines, setLines] = (0, import_react.useState)(["Opened the crate."]);
+	const [progress, setProgress] = (0, import_react.useState)(8);
 	(0, import_react.useEffect)(() => {
 		if (!analysis) {
 			failForge("Nothing to forge.");
 			return;
 		}
 		let cancelled = false;
-		planForge({ data: {
+		const log = (line) => {
+			if (cancelled) return;
+			setLines((prev) => prev[prev.length - 1] === line ? prev : [...prev, line]);
+			setProgress((p) => Math.min(92, p + 10));
+		};
+		executeForge({
 			analysis,
-			name: name.trim()
-		} }).then((plan) => {
-			if (!cancelled) planRef.current = plan;
-		}).catch(() => {
-			if (!cancelled) planRef.current = {
-				window: {
-					width: 1280,
-					height: 800
-				},
-				notes: heuristicNotes(analysis),
-				caveats: []
-			};
-		});
-		const reduce = typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-		const stepMs = reduce ? 40 : 420;
-		let i = 1;
-		const id = window.setInterval(() => {
-			i += 1;
-			setShown(i);
-			setProgress(Math.min(96, Math.round(i / Math.max(lines.length, 1) * 100)));
-			if (i >= lines.length) {
-				window.clearInterval(id);
-				window.setTimeout(() => {
-					if (cancelled) return;
-					const plan = planRef.current ?? {
-						window: {
-							width: 1280,
-							height: 800
-						},
-						notes: heuristicNotes(analysis),
-						caveats: []
-					};
-					finishForge(plan);
-				}, reduce ? 50 : 700);
+			files,
+			name: name.trim() || "App",
+			log
+		}).then((result) => {
+			if (cancelled) return;
+			if (!result.ok) {
+				failForge(result.error);
+				return;
 			}
-		}, stepMs);
+			setProgress(100);
+			finishForge(result.plan, {
+				assets: result.assets,
+				kind: result.kind
+			});
+		}).catch(() => {
+			if (!cancelled) failForge("The forge could not finish.");
+		});
 		return () => {
 			cancelled = true;
-			window.clearInterval(id);
 		};
 	}, [
 		analysis,
 		failForge,
+		files,
 		finishForge,
-		lines.length,
 		name
 	]);
-	const visible = lines.slice(0, shown);
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
 		className: "relative mx-auto flex w-full max-w-lg flex-1 flex-col items-center justify-center px-5 pb-28 pt-6 text-center",
 		children: [
@@ -1390,8 +1530,8 @@ function ForgeStage() {
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("ol", {
 				className: "mt-8 w-full min-h-40 self-stretch space-y-2 text-left font-mono text-sm",
-				children: visible.map((line, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", {
-					className: i === visible.length - 1 ? "text-fg" : "text-muted",
+				children: lines.map((line, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", {
+					className: i === lines.length - 1 ? "text-fg" : "text-muted",
 					children: line
 				}, `${i}-${line}`))
 			})

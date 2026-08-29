@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { geometricCover, letterIcon, looksLikeIcon, looksLikePicture } from "@/lib/assets";
 import { detectProject, type Analysis, type FileMap } from "@/lib/detect";
+import type { BuildKind, BuiltAsset } from "@/lib/forge/types";
 import { inspectUrl } from "@/lib/inspect";
 import { getSample } from "@/lib/samples";
 import type { HistoryItem, Platform, Platforms } from "@/lib/types";
@@ -42,6 +43,8 @@ type KajiState = {
   analysis: Analysis | null;
   files: FileMap;
   plan: ForgePlan | null;
+  builtAssets: BuiltAsset[] | null;
+  buildKind: BuildKind | null;
   history: HistoryItem[];
   ingestUrl: (raw: string) => Promise<void>;
   ingestSample: (id: string) => void;
@@ -53,7 +56,7 @@ type KajiState = {
   goSet: () => void;
   goDrop: () => void;
   startForge: () => void;
-  finishForge: (plan: ForgePlan) => void;
+  finishForge: (plan: ForgePlan, built: { assets: BuiltAsset[] | null; kind: BuildKind }) => void;
   failForge: (message: string) => void;
   loadHistory: () => void;
   reset: () => void;
@@ -90,6 +93,8 @@ export const useKaji = create<KajiState>((set, get) => ({
   analysis: null,
   files: {},
   plan: null,
+  builtAssets: null,
+  buildKind: null,
   history: [],
 
   ingestUrl: async (raw) => {
@@ -106,6 +111,8 @@ export const useKaji = create<KajiState>((set, get) => ({
         error: null,
         stage: "set",
         plan: null,
+        builtAssets: null,
+        buildKind: null,
       });
     } catch {
       set({
@@ -132,6 +139,8 @@ export const useKaji = create<KajiState>((set, get) => ({
       analyzing: false,
       stage: "set",
       plan: null,
+      builtAssets: null,
+      buildKind: null,
     });
   },
 
@@ -153,6 +162,8 @@ export const useKaji = create<KajiState>((set, get) => ({
       analyzing: false,
       stage: "set",
       plan: null,
+      builtAssets: null,
+      buildKind: null,
     });
   },
 
@@ -188,9 +199,9 @@ export const useKaji = create<KajiState>((set, get) => ({
       set({ error: "Choose at least one platform." });
       return;
     }
-    set({ stage: "forge", forging: true, error: null });
+    set({ stage: "forge", forging: true, error: null, builtAssets: null, buildKind: null });
   },
-  finishForge: (plan) => {
+  finishForge: (plan, built) => {
     const { name, analysis, history } = get();
     const item: HistoryItem = {
       id: crypto.randomUUID(),
@@ -200,7 +211,14 @@ export const useKaji = create<KajiState>((set, get) => ({
     };
     const nextHistory = [item, ...history.filter((h) => h.name !== item.name)].slice(0, 6);
     writeHistory(nextHistory);
-    set({ plan, forging: false, stage: "done", history: nextHistory });
+    set({
+      plan,
+      builtAssets: built.assets,
+      buildKind: built.kind,
+      forging: false,
+      stage: "done",
+      history: nextHistory,
+    });
   },
   failForge: (message) => set({ forging: false, error: message, stage: "set" }),
   loadHistory: () => set({ history: readHistory() }),
@@ -217,5 +235,7 @@ export const useKaji = create<KajiState>((set, get) => ({
       analysis: null,
       files: {},
       plan: null,
+      builtAssets: null,
+      buildKind: null,
     }),
 }));

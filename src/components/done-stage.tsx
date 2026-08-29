@@ -7,6 +7,12 @@ import { buildDesktopZip, triggerDownload } from "@/lib/package-app";
 import { useKaji } from "@/lib/kaji-store";
 import { PLATFORM_ARTIFACT, PLATFORM_LABEL, type Platform } from "@/lib/types";
 
+const KIND_LABEL = {
+  vite: "Compiled with Vite",
+  static: "Packed as static files",
+  url: "Live site in a native window",
+} as const;
+
 export function DoneStage() {
   const analysis = useKaji((s) => s.analysis);
   const plan = useKaji((s) => s.plan);
@@ -15,25 +21,33 @@ export function DoneStage() {
   const pictureDataUrl = useKaji((s) => s.pictureDataUrl);
   const platforms = useKaji((s) => s.platforms);
   const files = useKaji((s) => s.files);
+  const builtAssets = useKaji((s) => s.builtAssets);
+  const buildKind = useKaji((s) => s.buildKind);
   const reset = useKaji((s) => s.reset);
   const [busy, setBusy] = useState<Platform | "all" | null>(null);
 
   const selected = (Object.keys(platforms) as Platform[]).filter((p) => platforms[p]);
 
+  async function pack(platform: Platform) {
+    if (!analysis || !plan) throw new Error("missing");
+    return buildDesktopZip({
+      name: name.trim(),
+      analysis,
+      plan,
+      platform,
+      iconDataUrl,
+      pictureDataUrl,
+      files,
+      assets: builtAssets,
+      kind: buildKind,
+    });
+  }
+
   async function download(platform: Platform) {
-    if (!analysis || !plan) return;
     setBusy(platform);
     try {
-      const pack = await buildDesktopZip({
-        name: name.trim(),
-        analysis,
-        plan,
-        platform,
-        iconDataUrl,
-        pictureDataUrl,
-        files,
-      });
-      triggerDownload(pack.blob, pack.filename);
+      const built = await pack(platform);
+      triggerDownload(built.blob, built.filename);
       toast.success(
         `${PLATFORM_LABEL[platform]}${PLATFORM_ARTIFACT[platform] ? ` ${PLATFORM_ARTIFACT[platform]}` : ""} is ready`,
       );
@@ -48,17 +62,8 @@ export function DoneStage() {
     setBusy("all");
     try {
       for (const p of selected) {
-        if (!analysis || !plan) continue;
-        const pack = await buildDesktopZip({
-          name: name.trim(),
-          analysis,
-          plan,
-          platform: p,
-          iconDataUrl,
-          pictureDataUrl,
-          files,
-        });
-        triggerDownload(pack.blob, pack.filename);
+        const built = await pack(p);
+        triggerDownload(built.blob, built.filename);
       }
       toast.success("All builds are ready");
     } catch {
@@ -109,9 +114,12 @@ export function DoneStage() {
 
         <dl className="mt-10 grid gap-4 text-sm sm:grid-cols-2">
           <Fact label="What it is" value={`${analysis.framework} · ${analysis.language}`} />
+          <Fact
+            label="Forge"
+            value={buildKind ? KIND_LABEL[buildKind] : "Native window"}
+          />
           <Fact label="Window" value={`${plan.window.width} × ${plan.window.height}`} />
           {analysis.entry ? <Fact label="Entry" value={analysis.entry} /> : null}
-          <Fact label="Output" value="Native window, standalone binary" />
         </dl>
 
         {plan.notes.length ? (

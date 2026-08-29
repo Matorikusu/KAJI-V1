@@ -1,7 +1,7 @@
 import { t as createServerFn } from "./ssr.mjs";
 import { t as createServerRpc } from "./createServerRpc-A6pJPYTF.mjs";
-import { n as detectProject, s as titleFromSlug } from "./detect-4ghxlhvC.mjs";
-//#region node_modules/.nitro/vite/services/ssr/assets/inspect-DTYrf3s6.js
+import { n as detectProject, o as titleFromSlug } from "./detect-B61kcKp4.mjs";
+//#region node_modules/.nitro/vite/services/ssr/assets/inspect-D3CIq0pd.js
 var INTERESTING = [
 	"package.json",
 	"package-lock.json",
@@ -42,6 +42,9 @@ var INTERESTING = [
 	"src/App.tsx",
 	"README.md"
 ];
+var SOURCE_FILE = /\.(html?|css|js|jsx|mjs|cjs|ts|tsx|json|svg|md)$/i;
+var SOURCE_DIR = /^(src|app|pages|public|components|lib|styles|assets|css|js|hooks|utils|features)\//;
+var SKIP_DIR = /(^|\/)(node_modules|dist|build|out|\.git|\.next|coverage)(\/|$)/;
 function parseGithub(raw) {
 	const trimmed = raw.trim().replace(/\/+$/, "");
 	const ssh = trimmed.match(/^git@github\.com:([^/]+)\/([^/]+?)(?:\.git)?$/i);
@@ -112,6 +115,30 @@ function extractTitle(html) {
 function decodeHtml(value) {
 	return value.replaceAll("&amp;", "&").replaceAll("&lt;", "<").replaceAll("&gt;", ">").replaceAll("&quot;", "\"").replaceAll("&#39;", "'");
 }
+async function fetchGithubSources(owner, repo, branch, files) {
+	const tree = await fetchJson(`https://api.github.com/repos/${owner}/${repo}/git/trees/${encodeURIComponent(branch)}?recursive=1`);
+	if (!tree?.tree) return;
+	const wanted = tree.tree.filter((item) => {
+		if (item.type !== "blob") return false;
+		if (SKIP_DIR.test(item.path)) return false;
+		if ((item.size || 0) > 2e5) return false;
+		if (files[item.path]) return false;
+		if (SOURCE_DIR.test(item.path) && SOURCE_FILE.test(item.path)) return true;
+		if (!item.path.includes("/") && SOURCE_FILE.test(item.path)) return true;
+		return false;
+	});
+	const rawBase = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/`;
+	const queue = [...wanted.slice(0, 70)];
+	const workers = Array.from({ length: 6 }, async () => {
+		while (queue.length) {
+			const item = queue.shift();
+			if (!item) return;
+			const text = await fetchText(rawBase + item.path, 6e3);
+			if (text != null) files[item.path] = text;
+		}
+	});
+	await Promise.all(workers);
+}
 async function inspectGithub(owner, repo) {
 	const apiRepo = await fetchJson(`https://api.github.com/repos/${owner}/${repo}`);
 	const branch = apiRepo?.default_branch || "main";
@@ -132,6 +159,7 @@ async function inspectGithub(owner, repo) {
 			}
 		}
 	}));
+	await fetchGithubSources(owner, repo, branch, files);
 	if (Object.keys(files).length === 0 && !apiRepo) return {
 		ok: false,
 		error: "Could not open that repository. Check the address, or drop the files instead."

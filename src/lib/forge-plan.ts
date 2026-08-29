@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { heuristicNotes, type Analysis } from "@/lib/detect";
+import type { IsolatedBuildResult } from "@/lib/forge/types";
 
 export type ForgePlan = {
   window: { width: number; height: number };
@@ -85,4 +86,35 @@ export const planForge = createServerFn({ method: "POST" })
     } catch {
       return fallback;
     }
+  });
+
+export const forgeJob = createServerFn({ method: "POST" })
+  .validator(
+    (input: {
+      analysis: Analysis;
+      name: string;
+      files: Record<string, string>;
+      kind: "vite" | "static" | "url";
+    }) => input,
+  )
+  .handler(async ({ data }): Promise<{ plan: ForgePlan; compile: IsolatedBuildResult | null }> => {
+    const plan = fallbackPlan(data.analysis);
+    if (data.kind !== "vite") return { plan, compile: null };
+    try {
+      const res = await fetch("http://127.0.0.1:8787/compile", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ files: data.files }),
+        signal: AbortSignal.timeout(120_000),
+      });
+      if (res.ok) {
+        const compile = (await res.json()) as IsolatedBuildResult;
+        return { plan, compile };
+      }
+    } catch {
+      /* worker not running — compile in this process */
+    }
+    const { runCompileWorker } = await import("@/lib/forge/compile.server");
+    const compile = await runCompileWorker(data.files);
+    return { plan, compile };
   });

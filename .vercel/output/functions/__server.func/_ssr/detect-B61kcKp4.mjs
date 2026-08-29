@@ -1,6 +1,6 @@
 import { n as clsx } from "../_libs/class-variance-authority+clsx.mjs";
 import { t as twMerge } from "../_libs/tailwind-merge.mjs";
-//#region node_modules/.nitro/vite/services/ssr/assets/detect-4ghxlhvC.js
+//#region node_modules/.nitro/vite/services/ssr/assets/detect-B61kcKp4.js
 function cn(...inputs) {
 	return twMerge(clsx(inputs));
 }
@@ -196,27 +196,9 @@ function heuristicNotes(analysis) {
 	notes.push(`${analysis.framework} · ${analysis.language}.`);
 	if (analysis.bundler) notes.push(`Built with ${analysis.bundler}.`);
 	if (analysis.alreadyDesktop) notes.push("Already wears a desktop shell — Kaji will restamp it.");
-	else notes.push("Will open in its own window, like any other app.");
+	else notes.push("Compiled, then opened in its own window.");
 	if (analysis.startUrl) notes.push("Points at a live address.");
 	return notes.slice(0, 3);
 }
-function forgeLogLines(analysis, name, platforms) {
-	const lines = ["Opened the crate."];
-	lines.push(`Found ${analysis.framework}.`);
-	lines.push(`${analysis.language} throughout.`);
-	if (analysis.bundler) lines.push(`${analysis.bundler}, ready.`);
-	if (analysis.entry) lines.push(`Entry at ${analysis.entry}.`);
-	if (analysis.buildCommand) lines.push(`Build known.`);
-	if (analysis.alreadyDesktop) lines.push("Shell already present — restamping.");
-	else lines.push("Shaping the shell.");
-	for (const p of platforms) {
-		const label = p === "macos" ? "macOS" : p === "windows" ? "Windows" : "Linux";
-		lines.push(`${label}, cut.`);
-	}
-	lines.push(`Stamped “${name}”.`);
-	lines.push("Quenching.");
-	lines.push("Ready.");
-	return lines;
-}
 //#endregion
-export { heuristicNotes as a, hashSeed as i, detectProject as n, slugify as o, forgeLogLines as r, titleFromSlug as s, cn as t };
+export { slugify as a, heuristicNotes as i, detectProject as n, titleFromSlug as o, hashSeed as r, cn as t };

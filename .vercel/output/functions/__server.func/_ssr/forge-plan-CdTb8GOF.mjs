@@ -1,7 +1,7 @@
 import { t as createServerFn } from "./ssr.mjs";
 import { t as createServerRpc } from "./createServerRpc-A6pJPYTF.mjs";
-import { a as heuristicNotes } from "./detect-4ghxlhvC.mjs";
-//#region node_modules/.nitro/vite/services/ssr/assets/forge-plan-CwShsR-L.js
+import { i as heuristicNotes } from "./detect-B61kcKp4.mjs";
+//#region node_modules/.nitro/vite/services/ssr/assets/forge-plan-CdTb8GOF.js
 function fallbackPlan(analysis) {
 	const wide = /dashboard|analytics|admin|editor|ide/i.test(`${analysis.framework} ${analysis.suggestedName} ${analysis.description ?? ""}`);
 	return {
@@ -73,5 +73,34 @@ var planForge = createServerFn({ method: "POST" }).validator((input) => input).h
 		return fallback;
 	}
 });
+var forgeJob_createServerFn_handler = createServerRpc({
+	id: "59c84470a2103de2db0f645c69a36714be92e5ac0bb08dd0e7944d4ea0ee73df",
+	name: "forgeJob",
+	filename: "src/lib/forge-plan.ts"
+}, (opts) => forgeJob.__executeServer(opts));
+var forgeJob = createServerFn({ method: "POST" }).validator((input) => input).handler(forgeJob_createServerFn_handler, async ({ data }) => {
+	const plan = fallbackPlan(data.analysis);
+	if (data.kind !== "vite") return {
+		plan,
+		compile: null
+	};
+	try {
+		const res = await fetch("http://127.0.0.1:8787/compile", {
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify({ files: data.files }),
+			signal: AbortSignal.timeout(12e4)
+		});
+		if (res.ok) return {
+			plan,
+			compile: await res.json()
+		};
+	} catch {}
+	const { runCompileWorker } = await import("./compile.server-C0FVNEfn.mjs");
+	return {
+		plan,
+		compile: await runCompileWorker(data.files)
+	};
+});
 //#endregion
-export { planForge_createServerFn_handler };
+export { forgeJob_createServerFn_handler, planForge_createServerFn_handler };

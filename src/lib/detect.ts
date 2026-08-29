@@ -292,7 +292,7 @@ export function heuristicNotes(analysis: Analysis): string[] {
   notes.push(`${analysis.framework} · ${analysis.language}.`);
   if (analysis.bundler) notes.push(`Built with ${analysis.bundler}.`);
   if (analysis.alreadyDesktop) notes.push("Already wears a desktop shell — Kaji will restamp it.");
-  else notes.push("Will open in its own window, like any other app.");
+  else notes.push("Compiled, then opened in its own window.");
   if (analysis.startUrl) notes.push("Points at a live address.");
   return notes.slice(0, 3);
 }

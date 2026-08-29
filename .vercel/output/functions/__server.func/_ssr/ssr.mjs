@@ -87,7 +87,7 @@ var HEADERS = { TSS_SHELL: "X-TSS_SHELL" };
 * the dev styles URL for route-scoped CSS collection.
 */
 async function getStartManifest(matchedRoutes) {
-	const { tsrStartManifest } = await import("../_tanstack-start-manifest_v-CwL1SMYH.mjs");
+	const { tsrStartManifest } = await import("../_tanstack-start-manifest_v--qhSQrPS.mjs");
 	const startManifest = tsrStartManifest();
 	let routes = startManifest.routes;
 	routes[rootRouteId];
@@ -107,13 +107,17 @@ async function getStartManifest(matchedRoutes) {
 	};
 }
 var manifest = {
+	"59c84470a2103de2db0f645c69a36714be92e5ac0bb08dd0e7944d4ea0ee73df": {
+		functionName: "forgeJob_createServerFn_handler",
+		importer: () => import("./forge-plan-CdTb8GOF.mjs")
+	},
 	"7a5d44b7352bf7aa960bbbc4866e5fa04de0ef887dcd1e0fa7de50fbc0613eda": {
 		functionName: "inspectUrl_createServerFn_handler",
-		importer: () => import("./inspect-DTYrf3s6.mjs")
+		importer: () => import("./inspect-D3CIq0pd.mjs")
 	},
 	"90f0238d0981348cc35948c8d1e89788d47bedbb92c75f99f95de535ab261262": {
 		functionName: "planForge_createServerFn_handler",
-		importer: () => import("./forge-plan-CwShsR-L.mjs")
+		importer: () => import("./forge-plan-CdTb8GOF.mjs")
 	}
 };
 async function getServerFnById(id, access) {
@@ -1383,7 +1387,7 @@ var getBaseManifest = getProdBaseManifest;
 var createEarlyHintsForRequest = createEarlyHintsCollector;
 async function loadEntries() {
 	const [routerEntry, startEntry, pluginAdapters] = await Promise.all([
-		import("./router-DC9seGTY.mjs").then((n) => n.t),
+		import("./router-BogtT4mM.mjs").then((n) => n.t),
 		import("./start-5Z2QO8AU.mjs"),
 		import("./empty-plugin-adapters-D9UWiqvJ.mjs")
 	]);

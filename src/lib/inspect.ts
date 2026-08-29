@@ -52,6 +52,11 @@ const INTERESTING = [
   "README.md",
 ];
 
+const SOURCE_FILE = /\.(html?|css|js|jsx|mjs|cjs|ts|tsx|json|svg|md)$/i;
+const SOURCE_DIR =
+  /^(src|app|pages|public|components|lib|styles|assets|css|js|hooks|utils|features)\//;
+const SKIP_DIR = /(^|\/)(node_modules|dist|build|out|\.git|\.next|coverage)(\/|$)/;
+
 function parseGithub(raw: string): { owner: string; repo: string } | null {
   const trimmed = raw.trim().replace(/\/+$/, "");
   const ssh = trimmed.match(/^git@github\.com:([^/]+)\/([^/]+?)(?:\.git)?$/i);
@@ -136,6 +141,41 @@ type GithubRepo = {
 
 type GithubContent = { name: string; path: string; type: "file" | "dir" | string };
 
+async function fetchGithubSources(
+  owner: string,
+  repo: string,
+  branch: string,
+  files: FileMap,
+) {
+  const tree = await fetchJson<{ tree?: { path: string; type: string; size?: number }[] }>(
+    `https://api.github.com/repos/${owner}/${repo}/git/trees/${encodeURIComponent(branch)}?recursive=1`,
+  );
+  if (!tree?.tree) return;
+
+  const wanted = tree.tree.filter((item) => {
+    if (item.type !== "blob") return false;
+    if (SKIP_DIR.test(item.path)) return false;
+    if ((item.size || 0) > 200_000) return false;
+    if (files[item.path]) return false;
+    if (SOURCE_DIR.test(item.path) && SOURCE_FILE.test(item.path)) return true;
+    if (!item.path.includes("/") && SOURCE_FILE.test(item.path)) return true;
+    return false;
+  });
+
+  const rawBase = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/`;
+  const cap = wanted.slice(0, 70);
+  const queue = [...cap];
+  const workers = Array.from({ length: 6 }, async () => {
+    while (queue.length) {
+      const item = queue.shift();
+      if (!item) return;
+      const text = await fetchText(rawBase + item.path, 6000);
+      if (text != null) files[item.path] = text;
+    }
+  });
+  await Promise.all(workers);
+}
+
 async function inspectGithub(owner: string, repo: string): Promise<InspectResult> {
   const apiRepo = await fetchJson<GithubRepo>(
     `https://api.github.com/repos/${owner}/${repo}`,
@@ -171,6 +211,8 @@ async function inspectGithub(owner: string, repo: string): Promise<InspectResult
       }
     }),
   );
+
+  await fetchGithubSources(owner, repo, branch, files);
 
   if (Object.keys(files).length === 0 && !apiRepo) {
     return {
