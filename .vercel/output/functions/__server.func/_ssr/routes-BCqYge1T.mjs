@@ -3,11 +3,11 @@ import { y as require_jsx_runtime, z as require_react } from "../_libs/@tanstack
 import { n as TSS_SERVER_FUNCTION, r as getServerFnById, t as createServerFn } from "./ssr.mjs";
 import { t as cva } from "../_libs/class-variance-authority+clsx.mjs";
 import { a as heuristicNotes, i as hashSeed, n as detectProject, o as slugify, r as forgeLogLines, t as cn } from "./detect-4ghxlhvC.mjs";
-import { a as Folder, c as ArrowLeft, i as Image, n as Scan, o as Download, r as Paperclip, s as ArrowRight } from "../_libs/lucide-react.mjs";
+import { a as Folder, c as ArrowLeft, i as Image$1, n as Scan, o as Download, r as Paperclip, s as ArrowRight } from "../_libs/lucide-react.mjs";
 import { n as toast, t as Toaster } from "../_libs/sonner.mjs";
 import { t as require_lib } from "../_libs/jszip+[...].mjs";
 import { t as create } from "../_libs/zustand.mjs";
-//#region node_modules/.nitro/vite/services/ssr/assets/routes-CJfR8zIZ.js
+//#region node_modules/.nitro/vite/services/ssr/assets/routes-BCqYge1T.js
 var import_react = /* @__PURE__ */ __toESM(require_react());
 var import_jsx_runtime = require_jsx_runtime();
 var import_lib = /* @__PURE__ */ __toESM(require_lib());
@@ -82,86 +82,154 @@ function Button({ className, variant, size, type = "button", ...props }) {
 		...props
 	});
 }
-function extFromDataUrl(dataUrl) {
-	const mime = dataUrl.match(/^data:([^;,]+)/)?.[1] || "";
-	if (mime.includes("svg")) return "svg";
-	if (mime.includes("jpeg")) return "jpg";
-	if (mime.includes("webp")) return "webp";
-	if (mime.includes("gif")) return "gif";
-	return "png";
-}
-function addDataUrl(zip, path, dataUrl) {
-	const base64 = dataUrl.match(/^data:[^;]+;base64,(.+)$/);
-	if (base64) {
-		zip.file(path, base64[1], { base64: true });
-		return path;
+function concat(parts) {
+	const total = parts.reduce((n, p) => n + p.length, 0);
+	const out = new Uint8Array(total);
+	let offset = 0;
+	for (const p of parts) {
+		out.set(p, offset);
+		offset += p.length;
 	}
-	const svg = dataUrl.match(/^data:image\/svg\+xml(?:;charset=utf-8)?,(.*)$/i);
-	if (svg) {
-		const out = path.replace(/\.[a-z]+$/i, ".svg");
-		zip.file(out, decodeURIComponent(svg[1]));
+	return out;
+}
+function u32(value) {
+	const buf = /* @__PURE__ */ new Uint8Array(4);
+	new DataView(buf.buffer).setUint32(0, value, true);
+	return buf;
+}
+function align4(n) {
+	return n + 3 & -4;
+}
+function pickleUInt32(value) {
+	return concat([u32(4), u32(value)]);
+}
+function pickleString(value) {
+	const str = new TextEncoder().encode(value);
+	const payload = align4(4 + str.length);
+	const buf = new Uint8Array(4 + payload);
+	const view = new DataView(buf.buffer);
+	view.setUint32(0, payload, true);
+	view.setUint32(4, str.length, true);
+	buf.set(str, 8);
+	return buf;
+}
+function ensureDir(root, parts) {
+	let dir = root;
+	for (const part of parts) {
+		const existing = dir.files[part];
+		if (existing && "files" in existing) dir = existing;
+		else {
+			const next = { files: {} };
+			dir.files[part] = next;
+			dir = next;
+		}
+	}
+	return dir;
+}
+/** Pack a map of archive paths → bytes into an Electron asar buffer (resources.neu). */
+function packAsar(files) {
+	const header = { files: {} };
+	const blobs = [];
+	let offset = 0;
+	const names = Object.keys(files).sort();
+	for (const name of names) {
+		const data = files[name];
+		const parts = name.replace(/\\/g, "/").replace(/^\/+/, "").split("/").filter(Boolean);
+		if (parts.length === 0) continue;
+		const base = parts.pop();
+		const dir = ensureDir(header, parts);
+		dir.files[base] = {
+			size: data.length,
+			offset: String(offset)
+		};
+		blobs.push(data);
+		offset += data.length;
+	}
+	const headerPickle = pickleString(JSON.stringify(header));
+	return concat([
+		pickleUInt32(headerPickle.length),
+		headerPickle,
+		...blobs
+	]);
+}
+function utf8(value) {
+	return new TextEncoder().encode(value);
+}
+var RUNTIME = {
+	windows: "/kaji-runtime/neutralino-win_x64.exe",
+	macos: "/kaji-runtime/neutralino-mac_universal",
+	linux: "/kaji-runtime/neutralino-linux_x64",
+	client: "/kaji-runtime/neutralino.js"
+};
+var runtimeCache = /* @__PURE__ */ new Map();
+async function loadRuntime(path) {
+	let pending = runtimeCache.get(path);
+	if (!pending) {
+		pending = fetch(path).then(async (res) => {
+			if (!res.ok) throw new Error("Runtime missing");
+			return new Uint8Array(await res.arrayBuffer());
+		});
+		runtimeCache.set(path, pending);
+	}
+	return pending;
+}
+function fileSafe(name) {
+	return name.replace(/[<>:"/\\|?*\u0000-\u001f]/g, "").trim() || slugify(name);
+}
+function appId(name) {
+	return `app.kaji.${slugify(name).replace(/[^a-z0-9-]/g, "") || "app"}`;
+}
+function escapeHtml(value) {
+	return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll("\"", "&quot;");
+}
+function decodeDataUrl(dataUrl) {
+	const match = dataUrl.match(/^data:([^;,]+)?(;charset=[^;,]*)?(;base64)?,(.*)$/s);
+	if (!match) return null;
+	const payload = match[4] ?? "";
+	if (match[3]) {
+		const binary = atob(payload);
+		const out = new Uint8Array(binary.length);
+		for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
 		return out;
 	}
-	return null;
+	try {
+		return utf8(decodeURIComponent(payload));
+	} catch {
+		return utf8(payload);
+	}
 }
-function launcher(platform, productName) {
-	if (platform === "windows") return {
-		name: "Start.bat",
-		unixPermissions: void 0,
-		body: `@echo off
-setlocal
-cd /d "%~dp0"
-where node >nul 2>nul
-if errorlevel 1 (
-  echo ${productName} needs Node.js the first time it launches.
-  echo Get it from https://nodejs.org then double-click Start.bat again.
-  pause
-  exit /b 1
-)
-if not exist node_modules (
-  echo Preparing ${productName}...
-  call npm install --no-fund --no-audit
-)
-npx --yes electron .
-`
-	};
-	if (platform === "macos") return {
-		name: "Start.command",
-		unixPermissions: 493,
-		body: `#!/bin/bash
-cd "$(dirname "$0")"
-if ! command -v node >/dev/null 2>&1; then
-  osascript -e 'display dialog "${productName} needs Node.js the first time it launches. Get it from https://nodejs.org" buttons {"OK"} default button 1'
-  open "https://nodejs.org"
-  exit 1
-fi
-if [ ! -d node_modules ]; then
-  echo "Preparing ${productName}..."
-  npm install --no-fund --no-audit
-fi
-npx --yes electron .
-`
-	};
-	return {
-		name: "start.sh",
-		unixPermissions: 493,
-		body: `#!/bin/bash
-cd "$(dirname "$0")"
-if ! command -v node >/dev/null 2>&1; then
-  echo "${productName} needs Node.js the first time it launches."
-  echo "Install Node, then run ./start.sh again."
-  exit 1
-fi
-if [ ! -d node_modules ]; then
-  echo "Preparing ${productName}..."
-  npm install --no-fund --no-audit
-fi
-npx --yes electron .
-`
-	};
+async function rasterIcon(dataUrl) {
+	const raw = decodeDataUrl(dataUrl);
+	if (!raw) return null;
+	if (/^data:image\/png/i.test(dataUrl)) return raw;
+	if (typeof document === "undefined") return raw;
+	return await new Promise((resolve) => {
+		const img = new Image();
+		img.onload = () => {
+			const canvas = document.createElement("canvas");
+			canvas.width = 256;
+			canvas.height = 256;
+			const ctx = canvas.getContext("2d");
+			if (!ctx) {
+				resolve(raw);
+				return;
+			}
+			ctx.drawImage(img, 0, 0, 256, 256);
+			canvas.toBlob((blob) => {
+				if (!blob) {
+					resolve(raw);
+					return;
+				}
+				blob.arrayBuffer().then((buf) => resolve(new Uint8Array(buf)));
+			}, "image/png");
+		};
+		img.onerror = () => resolve(raw);
+		img.src = dataUrl;
+	});
 }
 function shellHtml(opts) {
-	const picture = opts.picturePath ? `<img src="${opts.picturePath}" alt="" />` : "";
+	const picture = opts.hasCover ? `<img src="cover.png" alt="" />` : "";
+	const client = opts.hasClient ? `<script src="js/neutralino.js"><\/script><script>Neutralino.init();<\/script>` : "";
 	return `<!doctype html>
 <html lang="en">
 <head>
@@ -173,10 +241,9 @@ function shellHtml(opts) {
     html, body { margin: 0; height: 100%; background: #0b0b0c; color: #f4f2ec; font-family: Georgia, serif; }
     main { min-height: 100%; display: grid; place-items: center; padding: 48px 24px; }
     .card { width: min(720px, 100%); }
-    img { width: 100%; border-radius: 16px; display: block; outline: 1px solid rgba(244,242,236,.12); outline-offset: -1px; }
+    img { width: 100%; border-radius: 16px; display: block; }
     h1 { font-weight: 400; font-size: 42px; letter-spacing: -0.03em; margin: 28px 0 8px; }
     p { margin: 0; color: #8a8882; line-height: 1.5; }
-    .by { margin-top: 36px; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: #5c5b56; font-family: system-ui, sans-serif; }
   </style>
 </head>
 <body>
@@ -185,108 +252,194 @@ function shellHtml(opts) {
       ${picture}
       <h1>${escapeHtml(opts.name)}</h1>
       <p>${escapeHtml(opts.description || "Forged by Kaji.")}</p>
-      <div class="by">Kaji</div>
     </div>
   </main>
+  ${client}
 </body>
 </html>
 `;
 }
-function escapeHtml(value) {
-	return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll("\"", "&quot;");
+function makeConfig(opts) {
+	return {
+		applicationId: appId(opts.name),
+		version: "1.0.0",
+		defaultMode: "window",
+		port: 0,
+		documentRoot: "/resources/",
+		url: opts.url,
+		enableServer: opts.enableServer,
+		enableNativeAPI: true,
+		tokenSecurity: "one-time",
+		logging: {
+			enabled: false,
+			writeToLogFile: false
+		},
+		nativeAllowList: ["app.*", "window.*"],
+		modes: { window: {
+			title: opts.name,
+			width: opts.width,
+			height: opts.height,
+			minWidth: 480,
+			minHeight: 320,
+			fullScreen: false,
+			alwaysOnTop: false,
+			icon: opts.icon ? "/resources/icons/app.png" : void 0,
+			enableInspector: false,
+			borderless: false,
+			maximize: false,
+			hidden: false,
+			resizable: true,
+			exitProcessOnClose: true,
+			center: true
+		} },
+		cli: {
+			binaryName: opts.slug,
+			resourcesPath: "/resources/",
+			clientLibrary: "/resources/js/neutralino.js",
+			binaryVersion: "6.9.0",
+			clientVersion: "6.9.0"
+		}
+	};
 }
-function mainJs(opts) {
-	const load = opts.startUrl ? `win.loadURL(${JSON.stringify(opts.startUrl)});` : `win.loadFile(path.join(__dirname, "app", "index.html"));`;
-	return `const { app, BrowserWindow } = require("electron");
-const path = require("path");
-
-function createWindow() {
-  const win = new BrowserWindow({
-    width: ${opts.width},
-    height: ${opts.height},
-    title: ${JSON.stringify(opts.productName)},
-    autoHideMenuBar: true,
-    backgroundColor: "#0b0b0c",
-    webPreferences: {
-      preload: path.join(__dirname, "preload.cjs"),
-      contextIsolation: true,
-      nodeIntegration: false,
-    },
-  });
-  ${load}
+function webRootFromFiles(files) {
+	const html = Object.keys(files).find((path) => path.replace(/\\/g, "/").toLowerCase().endsWith("index.html"));
+	if (!html) return null;
+	const normalized = html.replace(/\\/g, "/");
+	const dir = normalized.includes("/") ? normalized.slice(0, normalized.lastIndexOf("/") + 1) : "";
+	const out = {};
+	for (const [path, content] of Object.entries(files)) {
+		const n = path.replace(/\\/g, "/");
+		if (dir && !n.startsWith(dir)) continue;
+		const rel = dir ? n.slice(dir.length) : n;
+		if (!rel || rel.endsWith("/")) continue;
+		if (!/\.(html?|css|js|mjs|cjs|svg)$/i.test(rel)) continue;
+		if (/^package(-lock)?\.json$/i.test(rel.split("/").pop() || "")) continue;
+		out[rel] = content;
+	}
+	return Object.keys(out).length ? out : null;
 }
-
-app.whenReady().then(createWindow);
-app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") app.quit();
-});
-app.on("activate", () => {
-  if (BrowserWindow.getAllWindows().length === 0) createWindow();
-});
+function infoPlist(opts) {
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleDevelopmentRegion</key>
+  <string>en</string>
+  <key>CFBundleDisplayName</key>
+  <string>${escapeHtml(opts.name)}</string>
+  <key>CFBundleExecutable</key>
+  <string>${escapeHtml(opts.slug)}</string>
+  <key>CFBundleIdentifier</key>
+  <string>${escapeHtml(opts.id)}</string>
+  <key>CFBundleInfoDictionaryVersion</key>
+  <string>6.0</string>
+  <key>CFBundleName</key>
+  <string>${escapeHtml(opts.name)}</string>
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+  <key>CFBundleShortVersionString</key>
+  <string>1.0.0</string>
+  <key>CFBundleVersion</key>
+  <string>1.0.0</string>
+  <key>LSMinimumSystemVersion</key>
+  <string>11.0</string>
+  <key>NSHighResolutionCapable</key>
+  <true/>
+  <key>NSPrincipalClass</key>
+  <string>NSApplication</string>
+</dict>
+</plist>
 `;
 }
 async function buildDesktopZip(opts) {
-	const zip = new import_lib.default();
-	const slug = slugify(opts.name);
-	const root = zip.folder(opts.name) ?? zip;
-	const platformLabel = opts.platform === "macos" ? "macOS" : opts.platform === "windows" ? "Windows" : "Linux";
-	let iconPath = null;
-	if (opts.iconDataUrl) iconPath = addDataUrl(root, `icon.${extFromDataUrl(opts.iconDataUrl)}`, opts.iconDataUrl);
-	let pictureRel = null;
-	if (opts.pictureDataUrl) {
-		const saved = addDataUrl(root, `app/cover.${extFromDataUrl(opts.pictureDataUrl)}`, opts.pictureDataUrl);
-		if (saved) pictureRel = saved.replace(/^app\//, "");
+	const name = opts.name.trim() || "App";
+	const slug = slugify(name);
+	const safe = fileSafe(name);
+	const startUrl = opts.analysis.startUrl;
+	const remote = Boolean(startUrl && /^https?:\/\//i.test(startUrl));
+	const staticFiles = !remote && opts.analysis.framework === "Static site" ? webRootFromFiles(opts.files ?? {}) : null;
+	const asarFiles = {};
+	let iconPacked = false;
+	if (opts.iconDataUrl) {
+		const png = await rasterIcon(opts.iconDataUrl);
+		if (png) {
+			asarFiles["resources/icons/app.png"] = png;
+			iconPacked = true;
+		}
 	}
-	root.file("package.json", JSON.stringify({
-		name: slug,
-		productName: opts.name,
-		version: "1.0.0",
-		private: true,
-		main: "main.cjs",
-		scripts: { start: "electron ." },
-		devDependencies: { electron: "^33.4.0" }
-	}, null, 2));
-	root.file("main.cjs", mainJs({
-		productName: opts.name,
+	if (remote) {} else if (staticFiles) for (const [rel, content] of Object.entries(staticFiles)) asarFiles[`resources/${rel}`] = utf8(content);
+	else {
+		let hasCover = false;
+		if (opts.pictureDataUrl) {
+			const png = await rasterIcon(opts.pictureDataUrl);
+			if (png) {
+				asarFiles["resources/cover.png"] = png;
+				hasCover = true;
+			}
+		}
+		asarFiles["resources/js/neutralino.js"] = await loadRuntime(RUNTIME.client);
+		asarFiles["resources/index.html"] = utf8(shellHtml({
+			name,
+			description: opts.analysis.description,
+			hasCover,
+			hasClient: true
+		}));
+	}
+	const config = makeConfig({
+		name,
+		slug,
 		width: opts.plan.window.width,
 		height: opts.plan.window.height,
-		startUrl: opts.analysis.startUrl
-	}));
-	root.file("preload.cjs", `const { contextBridge } = require("electron");
-contextBridge.exposeInMainWorld("kaji", { forged: true });
+		url: remote ? startUrl : "/",
+		enableServer: !remote,
+		icon: iconPacked
+	});
+	asarFiles["neutralino.config.json"] = utf8(JSON.stringify(config));
+	const resourcesNeu = packAsar(asarFiles);
+	const binary = await loadRuntime(RUNTIME[opts.platform]);
+	const zip = new import_lib.default();
+	if (opts.platform === "windows") {
+		zip.file(`${safe}.exe`, binary, { binary: true });
+		zip.file("resources.neu", resourcesNeu, { binary: true });
+		zip.file("Read me.txt", `Double-click ${safe}.exe to open ${name}.\nNo Visual Studio. No Node. No install wizard.\nWindows 10 or 11 with Microsoft Edge is enough.\n`);
+	} else if (opts.platform === "macos") {
+		const app = `${safe}.app`;
+		zip.file(`${app}/Contents/Info.plist`, infoPlist({
+			name,
+			slug,
+			id: appId(name)
+		}));
+		zip.file(`${app}/Contents/MacOS/${slug}`, binary, {
+			binary: true,
+			unixPermissions: 493
+		});
+		zip.file(`${app}/Contents/MacOS/resources.neu`, resourcesNeu, { binary: true });
+		zip.file(`${app}/Contents/PkgInfo`, "APPL????");
+		zip.file("Read me.txt", `Double-click ${safe}.app to open ${name}.\nFirst launch: right-click the app, choose Open, then Open again.\n`);
+	} else {
+		zip.file(slug, binary, {
+			binary: true,
+			unixPermissions: 493
+		});
+		zip.file("resources.neu", resourcesNeu, { binary: true });
+		zip.file(`${slug}.desktop`, `[Desktop Entry]
+Type=Application
+Name=${name}
+Exec=./${slug}
+Icon=applications-internet
+Terminal=false
+Categories=Utility;
 `);
-	root.file("app/index.html", shellHtml({
-		name: opts.name,
-		description: opts.analysis.description,
-		picturePath: pictureRel,
-		startUrl: opts.analysis.startUrl
-	}));
-	root.file("kaji.json", JSON.stringify({
-		name: opts.name,
-		platform: opts.platform,
-		analysis: opts.analysis,
-		plan: opts.plan,
-		icon: iconPath,
-		forgedAt: (/* @__PURE__ */ new Date()).toISOString()
-	}, null, 2));
-	const boot = launcher(opts.platform, opts.name);
-	root.file(boot.name, boot.body, boot.unixPermissions ? { unixPermissions: boot.unixPermissions } : void 0);
-	const openHow = opts.platform === "windows" ? "Double-click Start.bat." : opts.platform === "macos" ? "Double-click Start.command." : "Run ./start.sh.";
-	root.file("README.txt", `${opts.name}
-Forged by Kaji for ${platformLabel}.
-
-${openHow}
-The first launch prepares the runtime. After that, it opens like any other app.
-
-Window ${opts.plan.window.width}×${opts.plan.window.height}
-${opts.analysis.framework} · ${opts.analysis.language}
-`);
+		zip.file("Read me.txt", `Run ./${slug} to open ${name}.\nchmod +x ${slug} if your archive tool dropped the execute bit.\n`);
+	}
 	return {
 		blob: await zip.generateAsync({
 			type: "blob",
-			platform: opts.platform === "windows" ? "DOS" : "UNIX"
+			platform: opts.platform === "windows" ? "DOS" : "UNIX",
+			compression: "DEFLATE",
+			compressionOptions: { level: 6 }
 		}),
-		filename: `${slug}-1.0.0-${opts.platform}.zip`
+		filename: opts.platform === "windows" ? `${slug}-windows.zip` : opts.platform === "macos" ? `${slug}-macos.zip` : `${slug}-linux.zip`
 	};
 }
 function triggerDownload(blob, filename) {
@@ -297,7 +450,7 @@ function triggerDownload(blob, filename) {
 	document.body.appendChild(a);
 	a.click();
 	a.remove();
-	window.setTimeout(() => URL.revokeObjectURL(url), 2e3);
+	window.setTimeout(() => URL.revokeObjectURL(url), 4e3);
 }
 function letterIcon(name) {
 	const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
@@ -697,6 +850,11 @@ var PLATFORM_LABEL = {
 	macos: "macOS",
 	linux: "Linux"
 };
+var PLATFORM_ARTIFACT = {
+	windows: ".exe",
+	macos: ".app",
+	linux: ""
+};
 function DoneStage() {
 	const analysis = useKaji((s) => s.analysis);
 	const plan = useKaji((s) => s.plan);
@@ -704,6 +862,7 @@ function DoneStage() {
 	const iconDataUrl = useKaji((s) => s.iconDataUrl);
 	const pictureDataUrl = useKaji((s) => s.pictureDataUrl);
 	const platforms = useKaji((s) => s.platforms);
+	const files = useKaji((s) => s.files);
 	const reset = useKaji((s) => s.reset);
 	const [busy, setBusy] = (0, import_react.useState)(null);
 	const selected = Object.keys(platforms).filter((p) => platforms[p]);
@@ -717,12 +876,13 @@ function DoneStage() {
 				plan,
 				platform,
 				iconDataUrl,
-				pictureDataUrl
+				pictureDataUrl,
+				files
 			});
 			triggerDownload(pack.blob, pack.filename);
-			toast.success(`${PLATFORM_LABEL[platform]} is ready`);
+			toast.success(`${PLATFORM_LABEL[platform]}${PLATFORM_ARTIFACT[platform] ? ` ${PLATFORM_ARTIFACT[platform]}` : ""} is ready`);
 		} catch {
-			toast.error("Could not prepare that download.");
+			toast.error("Could not compile that build.");
 		} finally {
 			setBusy(null);
 		}
@@ -730,7 +890,22 @@ function DoneStage() {
 	async function downloadAll() {
 		setBusy("all");
 		try {
-			for (const p of selected) await download(p);
+			for (const p of selected) {
+				if (!analysis || !plan) continue;
+				const pack = await buildDesktopZip({
+					name: name.trim(),
+					analysis,
+					plan,
+					platform: p,
+					iconDataUrl,
+					pictureDataUrl,
+					files
+				});
+				triggerDownload(pack.blob, pack.filename);
+			}
+			toast.success("All builds are ready");
+		} catch {
+			toast.error("Could not compile those builds.");
 		} finally {
 			setBusy(null);
 		}
@@ -749,7 +924,7 @@ function DoneStage() {
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 				className: "mt-4 max-w-md text-muted",
-				children: "Download the desktop app for each platform you chose. The first launch prepares the runtime — after that, it opens like anything else."
+				children: "Compiled to a standalone desktop app. Download, unzip, and double-click. No Visual Studio. No Node. No terminal."
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 				className: "mt-8 flex flex-col gap-2 sm:flex-row sm:flex-wrap",
@@ -762,13 +937,13 @@ function DoneStage() {
 					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Download, {
 						className: "size-4",
 						strokeWidth: 1.75
-					}), busy === p ? "Preparing" : PLATFORM_LABEL[p]]
+					}), busy === p ? "Compiling" : PLATFORM_ARTIFACT[p] ? `${PLATFORM_LABEL[p]} (${PLATFORM_ARTIFACT[p]})` : PLATFORM_LABEL[p]]
 				}, p)), selected.length > 1 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Button, {
 					size: "lg",
 					variant: "ghost",
 					disabled: busy !== null,
 					onClick: downloadAll,
-					children: busy === "all" ? "Preparing" : "All platforms"
+					children: busy === "all" ? "Compiling" : "All platforms"
 				}) : null]
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("dl", {
@@ -786,10 +961,10 @@ function DoneStage() {
 						label: "Entry",
 						value: analysis.entry
 					}) : null,
-					analysis.packageManager ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Fact, {
-						label: "Lock",
-						value: analysis.packageManager
-					}) : null
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Fact, {
+						label: "Output",
+						value: "Native window, standalone binary"
+					})
 				]
 			}),
 			plan.notes.length ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
@@ -1347,7 +1522,7 @@ function SetStage() {
 									src: pictureDataUrl,
 									alt: "",
 									className: "h-16 w-full rounded-md object-cover outline outline-1 -outline-offset-1 outline-fg/10"
-								}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Image, {
+								}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Image$1, {
 									className: "size-6 text-subtle",
 									strokeWidth: 1.5
 								})

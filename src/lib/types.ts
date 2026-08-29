@@ -14,3 +14,9 @@ export const PLATFORM_LABEL: Record<Platform, string> = {
   macos: "macOS",
   linux: "Linux",
 };
+
+export const PLATFORM_ARTIFACT: Record<Platform, string> = {
+  windows: ".exe",
+  macos: ".app",
+  linux: "",
+};

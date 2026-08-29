@@ -5,7 +5,7 @@ import { DesktopWindow } from "@/components/desktop-window";
 import { Button } from "@/components/ui/button";
 import { buildDesktopZip, triggerDownload } from "@/lib/package-app";
 import { useKaji } from "@/lib/kaji-store";
-import { PLATFORM_LABEL, type Platform } from "@/lib/types";
+import { PLATFORM_ARTIFACT, PLATFORM_LABEL, type Platform } from "@/lib/types";
 
 export function DoneStage() {
   const analysis = useKaji((s) => s.analysis);
@@ -14,6 +14,7 @@ export function DoneStage() {
   const iconDataUrl = useKaji((s) => s.iconDataUrl);
   const pictureDataUrl = useKaji((s) => s.pictureDataUrl);
   const platforms = useKaji((s) => s.platforms);
+  const files = useKaji((s) => s.files);
   const reset = useKaji((s) => s.reset);
   const [busy, setBusy] = useState<Platform | "all" | null>(null);
 
@@ -30,11 +31,14 @@ export function DoneStage() {
         platform,
         iconDataUrl,
         pictureDataUrl,
+        files,
       });
       triggerDownload(pack.blob, pack.filename);
-      toast.success(`${PLATFORM_LABEL[platform]} is ready`);
+      toast.success(
+        `${PLATFORM_LABEL[platform]}${PLATFORM_ARTIFACT[platform] ? ` ${PLATFORM_ARTIFACT[platform]}` : ""} is ready`,
+      );
     } catch {
-      toast.error("Could not prepare that download.");
+      toast.error("Could not compile that build.");
     } finally {
       setBusy(null);
     }
@@ -44,8 +48,21 @@ export function DoneStage() {
     setBusy("all");
     try {
       for (const p of selected) {
-        await download(p);
+        if (!analysis || !plan) continue;
+        const pack = await buildDesktopZip({
+          name: name.trim(),
+          analysis,
+          plan,
+          platform: p,
+          iconDataUrl,
+          pictureDataUrl,
+          files,
+        });
+        triggerDownload(pack.blob, pack.filename);
       }
+      toast.success("All builds are ready");
+    } catch {
+      toast.error("Could not compile those builds.");
     } finally {
       setBusy(null);
     }
@@ -61,8 +78,8 @@ export function DoneStage() {
           {name.trim()} is forged.
         </h2>
         <p className="mt-4 max-w-md text-muted">
-          Download the desktop app for each platform you chose. The first launch prepares the
-          runtime — after that, it opens like anything else.
+          Compiled to a standalone desktop app. Download, unzip, and double-click. No Visual
+          Studio. No Node. No terminal.
         </p>
 
         <div className="mt-8 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
@@ -76,31 +93,25 @@ export function DoneStage() {
               onClick={() => download(p)}
             >
               <Download className="size-4" strokeWidth={1.75} />
-              {busy === p ? "Preparing" : PLATFORM_LABEL[p]}
+              {busy === p
+                ? "Compiling"
+                : PLATFORM_ARTIFACT[p]
+                  ? `${PLATFORM_LABEL[p]} (${PLATFORM_ARTIFACT[p]})`
+                  : PLATFORM_LABEL[p]}
             </Button>
           ))}
           {selected.length > 1 ? (
-            <Button
-              size="lg"
-              variant="ghost"
-              disabled={busy !== null}
-              onClick={downloadAll}
-            >
-              {busy === "all" ? "Preparing" : "All platforms"}
+            <Button size="lg" variant="ghost" disabled={busy !== null} onClick={downloadAll}>
+              {busy === "all" ? "Compiling" : "All platforms"}
             </Button>
           ) : null}
         </div>
 
         <dl className="mt-10 grid gap-4 text-sm sm:grid-cols-2">
           <Fact label="What it is" value={`${analysis.framework} · ${analysis.language}`} />
-          <Fact
-            label="Window"
-            value={`${plan.window.width} × ${plan.window.height}`}
-          />
+          <Fact label="Window" value={`${plan.window.width} × ${plan.window.height}`} />
           {analysis.entry ? <Fact label="Entry" value={analysis.entry} /> : null}
-          {analysis.packageManager ? (
-            <Fact label="Lock" value={analysis.packageManager} />
-          ) : null}
+          <Fact label="Output" value="Native window, standalone binary" />
         </dl>
 
         {plan.notes.length ? (
